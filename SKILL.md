@@ -24,11 +24,21 @@ description: >-
 - 多台设备同时在线时，**所有命令必须 `adb -s <serial>`**。
 - 收尾必须提醒用户关闭 USB 调试（开着 = 任何能碰到 Mac 的人都能执行命令）。
 
-## 1. 环境接入
+## 1. 环境接入（两种部署形态，先探测用哪种）
 
-- Agent → Mac：`sshpass -e ssh -p 2233 user@127.0.0.1`（隧道建立方式见 `lan-ssh-tunnel` skill）。
-- adb 在 Mac：`~/platform-tools/adb`；不存在则 `curl -sSL -o ~/pt.zip https://dl.google.com/android/repository/platform-tools-latest-<darwin|linux>.zip && unzip -oq ~/pt.zip -d ~`。
-- 先 `adb devices -l` 验在线。中止条件：`unauthorized`（让用户在手机屏幕点允许后再继续）/ `offline` / 无设备。
+**形态 A：直连（最常见）** — Agent/harness 就跑在手机 USB 所连的那台电脑上：
+- adb 在本机：macOS `brew install --cask android-platform-tools`；Linux/Windows 下载官方 platform-tools；Windows 下命令为 `adb.exe`
+- 直接 `adb devices -l` 验证
+
+**形态 B：远程隧道** — Agent 在远程服务器，手机接在用户的 Mac 上：
+- Agent → Mac：`sshpass -e ssh -p 2233 user@127.0.0.1`（隧道建立方式见 `lan-ssh-tunnel` skill）
+- adb 在 Mac：`~/platform-tools/adb`；不存在则 `curl --proto '=https' -sSfL -o ~/pt.zip https://dl.google.com/android/repository/platform-tools-latest-darwin.zip && unzip -oq ~/pt.zip -d ~ && rm ~/pt.zip`
+- 每条 adb 命令都要包一层 SSH 执行
+
+**通用规则**：
+- 用 `adb devices -l` 探测：本机能看到设备 → 形态 A；看不到但存在 SSH 隧道 → 形态 B。检测到哪种就全程固定用哪种，**不混用**
+- 中止条件：`unauthorized`（让用户在手机屏幕点允许）/ `offline` / 无设备
+- 多台设备在线时，所有命令必须 `adb -s <serial>`（形态 B 中在 SSH 内层加）
 
 ## 2. ROM 识别（改动前第一步）
 

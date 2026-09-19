@@ -25,6 +25,19 @@
 
 ## 工作原理
 
+romcleanse 不绑定部署形态，两种环境都能跑：
+
+**形态 A：直连**（最常见）——手机 USB 直接连着跑 Agent/Harness 的电脑：
+
+```
+AI Agent / Harness（本机）
+   │  adb
+   ▼
+手机（USB 调试已授权）
+```
+
+**形态 B：远程隧道**——Agent 在远程服务器，手机接在用户的 Mac 上：
+
 ```
 AI Agent（远程服务器）
    │  sshpass ssh（隧道，如 IDEA Gateway 反向转发 :2233）
@@ -35,7 +48,7 @@ AI Agent（远程服务器）
 手机（USB 调试已授权）
 ```
 
-所有操作均为 **user 0 级**（`pm uninstall -k --user 0`）：APK 与数据保留在系统分区，任何改动一条命令即可完整恢复，不 root、不动 /system。
+所有操作均为 **user 0 级**（`pm uninstall -k --user 0`）：APK 与数据保留在系统分区，系统分区预装的改动一条命令即可完整恢复，不 root、不动 /system（/data 分区的第三方预装卸载后需重装，提案时逐行标注）。
 
 ## 核心手法
 
