@@ -1,121 +1,126 @@
 # romcleanse
 
-> 🇨🇳 国产安卓去广告与后台治理 · 一个给 AI Agent 用的 skill
-> An [OpenCode](https://github.com/sst/opencode) skill for de-advertising, de-bloating and background tuning on Chinese-vendor Android phones — driven by adb, no root required.
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-## 这是什么
+> De-advertise, de-bloat and tune background behavior on Chinese-vendor Android phones — an [OpenCode](https://github.com/sst/opencode) skill driven by adb, no root required.
 
-`romcleanse` 是一个 [OpenCode skill](https://opencode.ai)：让 AI Agent 通过一条 SSH 隧道 + adb，对你的国产安卓手机做系统级广告清理——卸载广告追踪框架、关预装推广、封锁后台自启、踢出后台唤醒白名单、顺带做一次隐私/监控审计。
+## What is this
 
-**一句话**：把「广告全家桶」从投放、追踪、自启、唤醒特权、通知五个层面全部切断——系统分区改动全程一键可逆，/data 第三方预装逐行标注恢复方式。
+`romcleanse` is an [OpenCode skill](https://opencode.ai) that lets an AI agent clean system-level ads from your Chinese-vendor Android phone over adb: uninstall ad/tracking frameworks, mute preloaded promo apps, block background auto-start, kick ad frameworks out of the doze whitelist — plus an optional privacy/spyware audit.
 
-## 支持的机型
+**In one line**: cut the "ad suite" at all five layers (delivery, tracking, auto-start, wake privileges, notifications) — system-partition changes are reversible in one command, and /data third-party preloads are annotated per-row with their recovery path.
 
-| 厂商 / 系统 | 状态 |
+## Supported devices
+
+| Vendor / ROM | Status |
 |---|---|
-| 小米 HyperOS / MIUI | ✅ 实机验证（HyperOS 1.0 与 3.0） |
-| OPPO / 一加 / realme（ColorOS） | ⚠️ 未实机验证，走证据流程 |
-| vivo / iQOO（OriginOS / Funtouch） | ⚠️ |
-| 荣耀（MagicOS） | ⚠️ |
-| 华为（EMUI / HarmonyOS 2–4） | ⚠️（adb 受限时降级为手动指引） |
-| 魅族 Flyme / 中兴 / 努比亚 | ⚠️（薄表 + 证据流程） |
-| **HarmonyOS NEXT（纯血）** | 🚫 无 adb，检出即中止 |
+| Xiaomi HyperOS / MIUI | ✅ Verified on real devices (HyperOS 1.0 & 3.0) |
+| OPPO / OnePlus / realme (ColorOS) | ⚠️ Unverified — evidence-driven triage |
+| vivo / iQOO (OriginOS / Funtouch) | ⚠️ Unverified |
+| HONOR (MagicOS) | ⚠️ Unverified |
+| Huawei (EMUI / HarmonyOS 2–4) | ⚠️ (degrades to manual guidance when adb is restricted) |
+| Meizu Flyme / ZTE / nubia | ⚠️ (thin tables + triage flow) |
+| **HarmonyOS NEXT** | 🚫 No adb — detected and aborted with manual guidance |
 
-未命中厂商签名时自动进入 `unknown-rom-triage` 保守模式：先枚举证据再提案，删除类操作必须用户逐个确认。
+If the ROM signature doesn't match any vendor, the skill falls back to the conservative evidence-driven triage mode: removal operations are proposed only, never executed without per-item user confirmation.
 
-## 工作原理
+## How it works
 
-romcleanse 不绑定部署形态，两种环境都能跑：
+romcleanse is deployment-agnostic — two environment shapes are supported:
 
-**形态 A：直连**（最常见）——手机 USB 直接连着跑 Agent/Harness 的电脑：
+**Shape A: direct** (most common) — the phone is plugged into the computer running the agent/harness:
 
 ```
-AI Agent / Harness（本机）
+AI Agent / Harness (local machine)
    │  adb
    ▼
-手机（USB 调试已授权）
+Phone (USB debugging authorized)
 ```
 
-**形态 B：远程隧道**——Agent 在远程服务器，手机接在用户的 Mac 上：
+**Shape B: remote tunnel** — the agent runs on a remote server, the phone is attached to the user's Mac:
 
 ```
-AI Agent（远程服务器）
-   │  sshpass ssh（隧道，如 IDEA Gateway 反向转发 :2233）
+AI Agent (remote server)
+   │  sshpass ssh (tunnel, e.g. JetBrains Gateway reverse forward :2233)
    ▼
-你的 Mac（adb platform-tools 所在地）
+Your Mac (adb platform-tools home)
    │  adb -s <serial>
    ▼
-手机（USB 调试已授权）
+Phone (USB debugging authorized)
 ```
 
-所有操作均为 **user 0 级**（`pm uninstall -k --user 0`）：APK 与数据保留在系统分区，系统分区预装的改动一条命令即可完整恢复，不 root、不动 /system（/data 分区的第三方预装卸载后需重装，提案时逐行标注）。
+All operations are **user 0 level** (`pm uninstall -k --user 0`): the APK and its data stay on the system partition, so system-partition changes are reversible with a single command — no root, no /system modification. Third-party preloads living on /data cannot be auto-restored after uninstall (reinstall from the store instead); the proposal table annotates each row.
 
-## 核心手法
+## Core techniques
 
-| 目标 | 手段 | 降级路径 |
+| Goal | Method | Fallback |
 |---|---|---|
-| 卸载广告/追踪框架、预装 | `pm uninstall -k --user 0 <pkg>` | 任何失败 → `pm disable-user --user 0` |
-| 关通知 | `pm revoke android.permission.POST_NOTIFICATIONS` | 系统固定权限 → `appops POST_NOTIFICATION deny` → 仍压不住则标「仅可手动关」 |
-| 禁自启动 | `appops RUN_ANY_IN_BACKGROUND ignore`（有效层） | + `am set-standby-bucket restricted`（可能被厂商电源守护改回，不算失败） |
-| 踢后台唤醒白名单 | `dumpsys deviceidle whitelist -<pkg>` | 广告框架常自加白，逐个踢出 |
+| Uninstall ad/tracking frameworks & preloads | `pm uninstall -k --user 0 <pkg>` | any failure → `pm disable-user --user 0` |
+| Kill notifications | `pm revoke android.permission.POST_NOTIFICATIONS` | system-fixed permission → `appops POST_NOTIFICATION deny` → if that won't stick, marked "manual only" |
+| Block auto-start | `appops RUN_ANY_IN_BACKGROUND ignore` (the effective layer) | + `am set-standby-bucket restricted` (may be overridden by vendor power keeper — not treated as failure) |
+| Kick doze whitelist | `dumpsys deviceidle whitelist -<pkg>` | ad frameworks often self-whitelist; kicked one by one |
 
-## 安全设计
+## Safety design
 
-- **改前必快照**：全量包列表 + 已禁用清单落盘到 Mac，恢复依据随报告交付
-- **输入法保底**：自动识别默认输入法与全部启用输入法，永不触碰（防锁屏打不了字）
-- **每批验活**：默认桌面解析与基线逐字符比对、SystemUI 存活、dropbox 崩溃时间戳对比基线，异常立即停手回滚
-- **NEVER 清单**：桌面、SystemUI、通知框架、安全内核、查找设备、账号云服务、活跃 device-admin……绝不提案
-- **唯一交互点**：分级提案（T1 广告框架 / T2 推广应用 / T3 第三方预装）确认后执行，其余不逐包打断
+- **Snapshot before any change**: full package list + disabled list saved to disk — restore reference comes with the report
+- **IME protection**: default and all enabled IMEs are auto-detected and never touched (no lock-screen lockout)
+- **Per-batch liveness checks**: default-launcher resolution compared byte-for-byte against baseline, SystemUI alive, dropbox crash timestamps vs baseline — any anomaly halts and rolls back
+- **NEVER list**: launcher, SystemUI, notification framework, security core, Find Device, account/cloud services, active device-admin holders… never proposed
+- **Change ledger**: every action recorded with its inverse command; full rollback is a scripted loop, not memory
+- **Single interaction point**: tiered proposal (T1 ad frameworks / T2 promo apps / T3 third-party preloads) confirmed by you, then executed; cautious rows require per-item confirmation
+- **Explicit command whitelist**: destructive shortcuts like `pm clear` (wipes user data) are forbidden by the skill's own rules
 
-## 使用
+## Usage
 
-把本目录放进 OpenCode skills 目录：
+Clone into your OpenCode skills directory:
 
 ```bash
 git clone https://github.com/mooire733/romcleanse ~/.config/opencode/skills/romcleanse
 ```
 
-重启 OpenCode 后对 Agent 说：
+Restart OpenCode, then tell your agent:
 
-- 「帮我给手机去广告 / 卸载预装」
-- 「关掉这些应用的推送和自启动」
-- 「查一下我手机有没有被监控」
+- "Clean the ads off my phone / remove preinstalled bloat"
+- "Turn off push notifications and auto-start for these apps"
+- "Check whether my phone is being monitored"
 
-Agent 会自动：识别 ROM → 安全快照 → 分级提案 →（你确认）→ 执行与硬化 → 出验证报告和恢复命令。
+The agent will: detect the ROM → take a safety snapshot → propose tiers → (you confirm) → execute & harden → deliver a verification report with restore commands.
 
-## 目录结构
+## Repository layout
 
 ```
 romcleanse/
-├── SKILL.md                      # 主流程：识别 → 快照 → 分级 → 执行 → 验证 → 恢复
+├── SKILL.md                      # Main flow: detect → snapshot → tier → execute → verify → restore
+├── README.md                     # This file (English)
+├── README.zh-CN.md               # Chinese readme
 └── references/
-    ├── xiaomi-hyperos.md         # ✅ 小米/红米 完整包分类表（实机验证）
-    ├── coloros-oplus.md          # OPPO/一加/realme
+    ├── xiaomi-hyperos.md         # ✅ Xiaomi/Redmi full package taxonomy (verified)
+    ├── coloros-oplus.md          # OPPO/OnePlus/realme
     ├── vivo-originos.md          # vivo/iQOO
-    ├── honor-magicos.md          # 荣耀
-    ├── huawei-emui-harmonyos.md  # 华为 + 纯血鸿蒙中止路径
-    ├── other-vendors.md          # 魅族/中兴/努比亚
-    ├── unknown-rom-triage.md     # 未知厂商/未知包的证据驱动分类法
-    └── privacy-audit.md          # 监控/间谍软件审计（按需加载）
+    ├── honor-magicos.md          # HONOR
+    ├── huawei-emui-harmonyos.md  # Huawei + HarmonyOS NEXT abort path
+    ├── other-vendors.md          # Meizu/ZTE/nubia
+    ├── unknown-rom-triage.md     # Evidence-driven classification for unknown ROMs/packages
+    └── privacy-audit.md          # Surveillance/stalkerware audit (loaded on demand)
 ```
 
-## 恢复速查
+## Restore cheat sheet
 
 ```bash
-adb shell pm install-existing <pkg>                       # 撤销卸载
-adb shell pm enable <pkg>                                 # 撤销禁用
-adb shell appops set <pkg> POST_NOTIFICATION default      # 恢复通知
-adb shell appops set <pkg> RUN_ANY_IN_BACKGROUND allow    # 恢复后台启动
-adb shell am set-standby-bucket <pkg> active              # 恢复待机档
-adb shell dumpsys deviceidle whitelist +<pkg>             # 加回唤醒白名单
+adb shell pm install-existing <pkg>                       # undo uninstall (system-partition packages)
+adb shell pm enable <pkg>                                 # undo disable-user (restores factory version)
+adb shell appops set <pkg> POST_NOTIFICATION default      # restore notifications
+adb shell appops set <pkg> RUN_ANY_IN_BACKGROUND allow    # restore background starts
+adb shell am set-standby-bucket <pkg> active              # restore standby bucket
+adb shell dumpsys deviceidle whitelist +<pkg>             # re-add to doze whitelist
 ```
 
-## 边界与免责
+## Boundaries & disclaimer
 
-- 非 root 方案的天然边界：系统固定权限（部分管家的通知开关）、应用内广告设置（如商店推荐流）只能手动关，skill 会如实标注
-- 审计无法覆盖 Google 账号层的共享/定位；USB 调试本身是攻击面，用完请关闭
-- 清理的是广告与预装，不是越狱；对任何包的作用拿不准时，skill 会选择「不执行」而不是赌一把
+- Non-root has hard limits: system-fixed permissions (some vendor managers' notification switches) and in-app ad settings (e.g. store recommendation feeds) can only be turned off manually — the skill says so honestly
+- The audit cannot see Google-account-level sharing/location; USB debugging itself is an attack surface — turn it off when done
+- This cleans ads and bloat, it is not jailbreaking; when the purpose of any package is uncertain, the skill chooses "don't touch" over guessing
 
 ## License
 
-MIT
+[MIT](LICENSE)
