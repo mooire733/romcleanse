@@ -14,7 +14,7 @@ description: >-
 ## 0. 铁律（先于一切）
 
 - **只做 `--user 0`**：禁 root/su/remount；禁碰 /system；禁 `pm uninstall` 不带 `-k`。
-- **命令白名单制**：只允许 §5/§6 列出的命令。**显式禁止**：`pm clear`（清用户数据，不可逆）、`pm uninstall` 不带 `-k`、`pm disable`（只用 disable-user）、`settings put`（global/secure/system 任何写入）、`cmd package suspend/hide`、`am force-stop` 之外的任何 am 写操作、`input`/`keyevent` 模拟点击。白名单/阶梯之外的命令一律记 skipped，**禁止即兴发挥**。
+- **改动类命令白名单**：写操作只允许 §5/§6/§8 列出的命令（含 §8 恢复命令）；只读查询命令（pm list、getprop、settings get、dumpsys、cmd package query/resolve 等）不受限。**显式禁止**：`pm clear`（清用户数据，不可逆）、`pm uninstall` 不带 `-k`、`pm disable`（只用 disable-user）、`settings put`（global/secure/system 任何写入）、`cmd package suspend/hide`、`input`/`keyevent` 模拟点击；am 写操作仅允许 §6/§8 用到的 `am set-standby-bucket` 与 `am force-stop`。白名单/阶梯之外的命令一律记 skipped，**禁止即兴发挥**。
 - **NEVER 清单**（任何情况下不得卸载/禁用，不得提案）：
   - **动态 NEVER**：§3 解析出的**当前默认桌面包名**、`ime list -s` 输出的**全部启用输入法** + `default_input_method` 指向的包——无论它们是否出现在任何厂商表中
   - launcher（如 com.miui.home / com.android.launcher3 / 各厂商桌面）、`com.android.systemui`
@@ -103,7 +103,7 @@ adb shell pm list users
 - 路径以 `/data/app` 开头 → 标「⚠️ 卸载后需重装，不可自动恢复」，且**该行必须逐项点名确认，不随层级确认批量放行**
 
 不在任何表的包 → 按 `references/unknown-rom-triage.md` 信号打分，归入「待用户确认」组，不混入 T1–T3。
-**层级确认不覆盖行内标注**：厂商表中标「用户选择」「卸载或硬化」的条目必须逐项点名，用户逐个拍板。
+**层级确认不覆盖行内标注**：提案/厂商表中行内带任何限定语（用户选择 / 卸载或硬化 / 谨慎 / 先硬化 / 需明确告知后果等）的条目，必须逐项点名，用户逐个拍板。
 
 ## 5. 执行阶梯（逐包，遇错降级不升级）
 
@@ -113,7 +113,7 @@ adb shell pm list users
     ↳ 仍失败 → 记 skipped，终点。禁止尝试任何阶梯外手段（见 §0 白名单制）
 ```
 
-- **改动台账**：每改一个包，追加一行到 `~/phone_pkg_changes_$TS.log`：`<pkg> <action> <逆操作命令>`——完整回滚靠它，不靠记忆。
+- **改动台账**：每改一个包，追加一行到 `~/phone_pkg_changes_$TS.log`：`<pkg> <action> <逆操作命令>`——完整回滚靠它，不靠记忆。涉及待机桶操作时，先读 `am get-standby-bucket <pkg>` 并把改动前的值直接写进逆操作列（如 `am set-standby-bucket <pkg> 20`）。
 - 每批 ≤10 包；每批后跑 alive 检查：
   - `cmd package resolve-activity --brief -a android.intent.action.MAIN -c android.intent.category.HOME` 结果与 `~/home_baseline_$TS.txt` **逐字符一致**（非空不够，防第三方桌面假阴性）
   - `pidof com.android.systemui` 有 pid
@@ -149,7 +149,8 @@ settings get secure default_input_method                                        
 # 一键恢复所有被卸载的系统分区包（与当前列表求差）：
 comm -23 ~/phone_pkg_backup_$TS.txt \
   <(adb shell pm list packages | tr -d '\r' | sed 's/^package://' | sort) \
-  | while read p; do adb shell pm install-existing "$p"; done
+  | while IFS= read -r p; do adb shell pm install-existing "$p"; done
+# 注：/data 分区的包（提案表中标 ⚠️ 的行）在此 loop 中会报错属预期，它们只能重装
 
 adb shell pm enable <pkg>                              # 撤销 disable-user（恢复为出厂版本，商店更新会丢，需重装更新）
 adb shell appops set <pkg> POST_NOTIFICATION default   # 恢复通知

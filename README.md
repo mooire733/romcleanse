@@ -7,7 +7,7 @@
 
 `romcleanse` 是一个 [OpenCode skill](https://opencode.ai)：让 AI Agent 通过一条 SSH 隧道 + adb，对你的国产安卓手机做系统级广告清理——卸载广告追踪框架、关预装推广、封锁后台自启、踢出后台唤醒白名单、顺带做一次隐私/监控审计。
 
-**一句话**：把「广告全家桶」从投放、追踪、自启、唤醒特权、通知五个层面全部切断，且全程可逆。
+**一句话**：把「广告全家桶」从投放、追踪、自启、唤醒特权、通知五个层面全部切断——系统分区改动全程一键可逆，/data 第三方预装逐行标注恢复方式。
 
 ## 支持的机型
 
@@ -54,7 +54,7 @@ AI Agent（远程服务器）
 
 | 目标 | 手段 | 降级路径 |
 |---|---|---|
-| 卸载广告/追踪框架、预装 | `pm uninstall -k --user 0 <pkg>` | 失败（-1000）→ `pm disable-user --user 0` |
+| 卸载广告/追踪框架、预装 | `pm uninstall -k --user 0 <pkg>` | 任何失败 → `pm disable-user --user 0` |
 | 关通知 | `pm revoke android.permission.POST_NOTIFICATIONS` | 系统固定权限 → `appops POST_NOTIFICATION deny` → 仍压不住则标「仅可手动关」 |
 | 禁自启动 | `appops RUN_ANY_IN_BACKGROUND ignore`（有效层） | + `am set-standby-bucket restricted`（可能被厂商电源守护改回，不算失败） |
 | 踢后台唤醒白名单 | `dumpsys deviceidle whitelist -<pkg>` | 广告框架常自加白，逐个踢出 |
@@ -62,8 +62,8 @@ AI Agent（远程服务器）
 ## 安全设计
 
 - **改前必快照**：全量包列表 + 已禁用清单落盘到 Mac，恢复依据随报告交付
-- **输入法保底**：自动识别当前/唯一输入法，永不触碰（防锁屏打不了字）
-- **每批验活**：桌面解析、SystemUI 存活、崩溃计数（dropbox）对比基线，异常立即停手回滚
+- **输入法保底**：自动识别默认输入法与全部启用输入法，永不触碰（防锁屏打不了字）
+- **每批验活**：默认桌面解析与基线逐字符比对、SystemUI 存活、dropbox 崩溃时间戳对比基线，异常立即停手回滚
 - **NEVER 清单**：桌面、SystemUI、通知框架、安全内核、查找设备、账号云服务、活跃 device-admin……绝不提案
 - **唯一交互点**：分级提案（T1 广告框架 / T2 推广应用 / T3 第三方预装）确认后执行，其余不逐包打断
 
